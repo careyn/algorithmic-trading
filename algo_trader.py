@@ -1,5 +1,9 @@
 import MetaTrader5 as mt5
 from datetime import datetime
+import pandas as pd
+import time
+import schedule
+import pytz
 
 # DEMO ACCOUNT INFORMATION
 login=52064612
@@ -15,14 +19,6 @@ def connect(login, password):
         print("Failed to connect at account #{}, error code: {}"
               .format(login, mt5.last_error()))
 
-# Testing rate collection
-# utc_from = datetime(2021, 9, 1)
-# utc_to = datetime(2021, 9, 10)
-
-# rates = mt5.copy_rates_range("EURUSD", mt5.TIMEFRAME_H4, utc_from, utc_to)
-
-# for rate in rates:
-#     print(rate)
 
 def open_position(pair, order_type, size, tp_distance=None, stop_distance=None):
     symbol_info = mt5.symbol_info(pair)
@@ -76,7 +72,70 @@ def open_position(pair, order_type, size, tp_distance=None, stop_distance=None):
     else:
         print ("Order successfully placed!")
 
-# Testing calls
+def positions_get(symbol=None):
+    if(symbol is None):
+	    res = mt5.positions_get()
+    else:
+        res = mt5.positions_get(symbol=symbol)
+
+    if(res is not None and res != ()):
+        df = pd.DataFrame(list(res),columns=res[0]._asdict().keys())
+        df['time'] = pd.to_datetime(df['time'], unit='s')
+        return df
+    
+    return pd.DataFrame()
+
+def close_position(deal_id):
+    open_positions = positions_get()
+    open_positions = open_positions[open_positions['ticket'] == deal_id]
+    order_type  = open_positions["type"][0]
+    symbol = open_positions['symbol'][0]
+    volume = open_positions['volume'][0]
+
+    if(order_type == mt5.ORDER_TYPE_BUY):
+        order_type = mt5.ORDER_TYPE_SELL
+        price = mt5.symbol_info_tick(symbol).bid
+    else:
+        order_type = mt5.ORDER_TYPE_BUY
+        price = mt5.symbol_info_tick(symbol).ask
+	
+    close_request={
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": float(volume),
+        "type": order_type,
+        "position": deal_id,
+        "price": price,
+        "magic": 234000,
+        "comment": "Close trade",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+
+    result = mt5.order_send(close_request)
+    
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print("Failed to close order :(")
+    else:
+        print ("Order successfully closed!")
+
+def close_positons_by_symbol(symbol):
+    open_positions = positions_get(symbol)
+    open_positions['ticket'].apply(lambda x: close_position(x))
+
+# Testing initial connection
+# connect(login, password)
+# utc_from = datetime(2021, 9, 1)
+# utc_to = datetime(2021, 9, 10)
+
+# rates = mt5.copy_rates_range("EURUSD", mt5.TIMEFRAME_H4, utc_from, utc_to)
+
+# for rate in rates:
+#     print(rate)
+
+# Testing function calls
 # connect(login, password)
 # open_position("Fake_Pair", "BUY", 1)
 # open_position("EURUSD", "BUY", 1.0)
+# positions_get()
+# close_positions_by_symbol("EURUSD")
