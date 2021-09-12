@@ -4,6 +4,7 @@ import pandas as pd
 import time
 import schedule
 import pytz
+import talib as ta
 
 # DEMO ACCOUNT INFORMATION
 login=52064612
@@ -135,7 +136,36 @@ def get_data(time_frame):
         rates_frame['time'] = pd.to_datetime(rates_frame['time'], unit='s')
         rates_frame.drop(rates_frame.tail(1).index, inplace = True)
         pair_data[pair] = rates_frame
+        print(pair_data[pair])
     return pair_data
+    
+def run_trader(time_frame):
+    connect(login, password)
+    print("Running trader at", datetime.now())
+    pair_data = get_data(time_frame)
+    check_trades(time_frame, pair_data)
+    
+def live_trading():
+    schedule.every().hour.at(":00").do(run_trader, mt5.TIMEFRAME_M15)
+    schedule.every().hour.at(":15").do(run_trader, mt5.TIMEFRAME_M15)
+    schedule.every().hour.at(":30").do(run_trader, mt5.TIMEFRAME_M15)
+    schedule.every().hour.at(":45").do(run_trader, mt5.TIMEFRAME_M15)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+def check_trades(time_frame, pair_data):
+    for pair, data in pair_data.items():
+        data['SMA'] = ta.SMA(data['close'], 10)
+        data['EMA'] = ta.EMA(data['close'], 50)
+        last_row = data.tail(1)
+        for index, last in last_row.iterrows():
+            if(last['close'] > last['EMA'] and last['close'] < last['SMA']):
+                open_position(pair, "BUY", 1, 300, 100)
+
+if __name__ == '__main__':
+    live_trading()
 
 # Testing initial connection
 # connect(login, password)
